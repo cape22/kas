@@ -1,6 +1,6 @@
 // URL GOOGLE APPS SCRIPT ANDA
-const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzwChwpIZcLXzu1e5V8L-xfc7N54HlxT7AwVXX_Gi5h09DwF8ASSPNCUwMdloR6yJyM/exec";
-const TREASURER_PIN = "150810"; // PIN Bendahara
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyNapvpbPn35fdP1aofVtA6jAcTh38uixWMH5bLIXfMk-49WD3sqz5E91EvLxnxxhFk/exec";
+const TREASURER_PIN = "310511"; // PIN Bendahara
 
 const DEFAULT_STUDENTS = [
     "ABITIA RAHMAN", "AKHMAD ROFIQ", "ALISHA SHALSHABILA", "ALLIA RAHAYU", "AMANDA FEBRIYANTI",
@@ -21,7 +21,7 @@ let transactions = [];
 let standardFee = 2000;
 let activeFilter = 'ALL';
 let searchQuery = '';
-let isTreasurer = false; // Status Role: false = Siswa, true = Bendahara
+let isTreasurer = false; // False = Siswa, True = Bendahara
 
 function getTodayString() {
     return new Date().toISOString().split('T')[0];
@@ -36,7 +36,6 @@ function formatDateReadable(dateStr) {
     return new Date(dateStr).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-// Update UI Berdasarkan Role
 function updateRoleUI() {
     const roleBadge = document.getElementById('roleBadge');
     const authBtn = document.getElementById('authBtn');
@@ -45,24 +44,28 @@ function updateRoleUI() {
     const actionCols = document.querySelectorAll('.action-col');
 
     if (isTreasurer) {
-        roleBadge.className = "bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5";
-        roleBadge.innerHTML = `<i class="fa-solid fa-user-shield"></i> Mode Bendahara`;
-        
-        authBtn.className = "bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold px-3.5 py-2 rounded-lg transition flex items-center gap-1.5 shadow-md";
-        authBtn.innerHTML = `<i class="fa-solid fa-right-from-bracket"></i> Keluar Bendahara`;
-        
-        treasurerControls.classList.remove('hidden');
-        studentNoticeBar.classList.add('hidden');
+        if(roleBadge) {
+            roleBadge.className = "bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5";
+            roleBadge.innerHTML = `<i class="fa-solid fa-user-shield"></i> Mode Bendahara`;
+        }
+        if(authBtn) {
+            authBtn.className = "bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold px-3.5 py-2 rounded-lg transition flex items-center gap-1.5 shadow-md";
+            authBtn.innerHTML = `<i class="fa-solid fa-right-from-bracket"></i> Keluar Bendahara`;
+        }
+        if(treasurerControls) treasurerControls.classList.remove('hidden');
+        if(studentNoticeBar) studentNoticeBar.classList.add('hidden');
         actionCols.forEach(el => el.classList.remove('hidden'));
     } else {
-        roleBadge.className = "bg-slate-700/80 px-3 py-1.5 rounded-lg border border-slate-600 text-xs font-semibold text-slate-300 flex items-center gap-1.5";
-        roleBadge.innerHTML = `<i class="fa-solid fa-eye text-blue-400"></i> Mode Siswa (Read-Only)`;
-        
-        authBtn.className = "bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs font-bold px-3.5 py-2 rounded-lg transition flex items-center gap-1.5 shadow-md";
-        authBtn.innerHTML = `<i class="fa-solid fa-key"></i> Login Bendahara`;
-        
-        treasurerControls.classList.add('hidden');
-        studentNoticeBar.classList.remove('hidden');
+        if(roleBadge) {
+            roleBadge.className = "bg-slate-700/80 px-3 py-1.5 rounded-lg border border-slate-600 text-xs font-semibold text-slate-300 flex items-center gap-1.5";
+            roleBadge.innerHTML = `<i class="fa-solid fa-eye text-blue-400"></i> Mode Siswa (Read-Only)`;
+        }
+        if(authBtn) {
+            authBtn.className = "bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs font-bold px-3.5 py-2 rounded-lg transition flex items-center gap-1.5 shadow-md";
+            authBtn.innerHTML = `<i class="fa-solid fa-key"></i> Login Bendahara`;
+        }
+        if(treasurerControls) treasurerControls.classList.add('hidden');
+        if(studentNoticeBar) studentNoticeBar.classList.remove('hidden');
         actionCols.forEach(el => el.classList.add('hidden'));
     }
 
@@ -71,16 +74,24 @@ function updateRoleUI() {
     renderTransactionHistory();
 }
 
-// Load Data from Google Sheets
+// Load Data & Filter Duplikat
 async function loadDataFromCloud() {
     try {
-        showToast("Mengambil data terbaru...");
+        showToast("Mengambil data...");
         const res = await fetch(GOOGLE_SCRIPT_URL);
         const data = await res.json();
 
         if (data.students && data.students.length > 0) {
-            students = data.students;
+            // Saring agar ID siswa tidak pernah ganda
+            const uniqueMap = new Map();
+            data.students.forEach(s => {
+                if (s.id && !uniqueMap.has(s.id)) {
+                    uniqueMap.set(s.id, s);
+                }
+            });
+            students = Array.from(uniqueMap.values());
         } else {
+            // Jika kosong, pakai daftar default
             students = DEFAULT_STUDENTS.map((name, idx) => ({ id: 'std_' + (idx + 1), name: name }));
             syncToCloud();
         }
@@ -97,8 +108,14 @@ async function loadDataFromCloud() {
 function loadFromLocalStorage() {
     const savedStudents = localStorage.getItem('kas_students');
     const savedTransactions = localStorage.getItem('kas_transactions');
-    if (savedStudents) students = JSON.parse(savedStudents);
-    else students = DEFAULT_STUDENTS.map((name, idx) => ({ id: 'std_' + (idx + 1), name: name }));
+    if (savedStudents) {
+        const parsed = JSON.parse(savedStudents);
+        const uniqueMap = new Map();
+        parsed.forEach(s => uniqueMap.set(s.id, s));
+        students = Array.from(uniqueMap.values());
+    } else {
+        students = DEFAULT_STUDENTS.map((name, idx) => ({ id: 'std_' + (idx + 1), name: name }));
+    }
     if (savedTransactions) transactions = JSON.parse(savedTransactions);
     renderAll();
 }
@@ -122,6 +139,7 @@ async function syncToCloud() {
 function showToast(message) {
     const toast = document.getElementById('toast');
     const msg = document.getElementById('toastMessage');
+    if (!toast || !msg) return;
     msg.textContent = message;
     toast.classList.remove('hidden');
     setTimeout(() => { toast.classList.add('hidden'); }, 3000);
@@ -145,11 +163,17 @@ function renderStats() {
         }
     });
 
-    document.getElementById('statTotalSaldo').textContent = formatRupiah(totalIn - totalOut);
-    document.getElementById('statTodayIncome').textContent = formatRupiah(todayIncome);
-    document.getElementById('statTotalIn').textContent = formatRupiah(totalIn);
-    document.getElementById('statTotalOut').textContent = formatRupiah(totalOut);
-    document.getElementById('statPaidTodayCount').textContent = paidTodayStudentIds.size;
+    const elTotal = document.getElementById('statTotalSaldo');
+    const elIncome = document.getElementById('statTodayIncome');
+    const elIn = document.getElementById('statTotalIn');
+    const elOut = document.getElementById('statTotalOut');
+    const elCount = document.getElementById('statPaidTodayCount');
+
+    if (elTotal) elTotal.textContent = formatRupiah(totalIn - totalOut);
+    if (elIncome) elIncome.textContent = formatRupiah(todayIncome);
+    if (elIn) elIn.textContent = formatRupiah(totalIn);
+    if (elOut) elOut.textContent = formatRupiah(totalOut);
+    if (elCount) elCount.textContent = paidTodayStudentIds.size;
 }
 
 function getStudentPaidTodayInfo(studentId) {
@@ -167,6 +191,7 @@ function getStudentTotalPaid(studentId) {
 
 function renderStudentCards() {
     const grid = document.getElementById('studentCardsGrid');
+    if (!grid) return;
     grid.innerHTML = '';
 
     let filtered = students.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -176,9 +201,13 @@ function renderStudentCards() {
     if (activeFilter === 'PAID') displayedList = studentStatusList.filter(item => item.status.paid);
     else if (activeFilter === 'UNPAID') displayedList = studentStatusList.filter(item => !item.status.paid);
 
-    document.getElementById('countAll').textContent = students.length;
-    document.getElementById('countPaid').textContent = students.filter(s => getStudentPaidTodayInfo(s.id).paid).length;
-    document.getElementById('countUnpaid').textContent = students.length - students.filter(s => getStudentPaidTodayInfo(s.id).paid).length;
+    const elAll = document.getElementById('countAll');
+    const elPaid = document.getElementById('countPaid');
+    const elUnpaid = document.getElementById('countUnpaid');
+
+    if (elAll) elAll.textContent = students.length;
+    if (elPaid) elPaid.textContent = students.filter(s => getStudentPaidTodayInfo(s.id).paid).length;
+    if (elUnpaid) elUnpaid.textContent = students.length - students.filter(s => getStudentPaidTodayInfo(s.id).paid).length;
 
     if (displayedList.length === 0) {
         grid.innerHTML = `<div class="col-span-full py-8 text-center text-xs text-slate-500">Tidak ada nama siswa</div>`;
@@ -248,6 +277,7 @@ function undoPaymentToday(studentId) {
 
 function renderStudentSummaryTable() {
     const tbody = document.getElementById('studentSummaryTableBody');
+    if (!tbody) return;
     tbody.innerHTML = '';
     students.forEach((student, index) => {
         const totalPaid = getStudentTotalPaid(student.id);
@@ -285,7 +315,10 @@ function deleteStudent(studentId) {
 
 function renderTransactionHistory() {
     const list = document.getElementById('transactionHistoryList');
-    const filterType = document.getElementById('txTypeFilter').value;
+    const filterSelect = document.getElementById('txTypeFilter');
+    if (!list) return;
+
+    const filterType = filterSelect ? filterSelect.value : 'ALL';
     list.innerHTML = '';
 
     let filteredTx = transactions;
@@ -335,6 +368,7 @@ function deleteTransaction(txId) {
 
 function populateStudentSelect() {
     const select = document.getElementById('txStudentSelect');
+    if (!select) return;
     select.innerHTML = '<option value="">-- Bukan Transaksi Perorangan --</option>';
     students.forEach(s => {
         const opt = document.createElement('option');
@@ -352,101 +386,122 @@ function renderAll() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('currentDateText').textContent = formatDateReadable(getTodayString());
+    const dateText = document.getElementById('currentDateText');
+    if (dateText) dateText.textContent = formatDateReadable(getTodayString());
     
-    // Auth Bendahara Handling
+    // Auth Bendahara
     const authBtn = document.getElementById('authBtn');
     const pinModal = document.getElementById('pinModal');
     const pinForm = document.getElementById('pinForm');
     const pinInput = document.getElementById('pinInput');
     const pinErrorMsg = document.getElementById('pinErrorMsg');
 
-    authBtn.addEventListener('click', () => {
-        if (isTreasurer) {
-            isTreasurer = false;
-            updateRoleUI();
-            showToast("Keluar dari Mode Bendahara");
-        } else {
-            pinModal.classList.remove('hidden');
-            pinInput.value = '';
-            pinErrorMsg.classList.add('hidden');
-            pinInput.focus();
-        }
-    });
+    if (authBtn) {
+        authBtn.addEventListener('click', () => {
+            if (isTreasurer) {
+                isTreasurer = false;
+                updateRoleUI();
+                showToast("Keluar dari Mode Bendahara");
+            } else {
+                if (pinModal) pinModal.classList.remove('hidden');
+                if (pinInput) { pinInput.value = ''; pinInput.focus(); }
+                if (pinErrorMsg) pinErrorMsg.classList.add('hidden');
+            }
+        });
+    }
 
-    document.getElementById('closePinModalBtn').addEventListener('click', () => pinModal.classList.add('hidden'));
+    const closePinBtn = document.getElementById('closePinModalBtn');
+    if (closePinBtn) closePinBtn.addEventListener('click', () => pinModal.classList.add('hidden'));
 
-    pinForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        if (pinInput.value === TREASURER_PIN) {
-            isTreasurer = true;
-            pinModal.classList.add('hidden');
-            updateRoleUI();
-            showToast("Berhasil masuk sebagai Bendahara!");
-        } else {
-            pinErrorMsg.classList.remove('hidden');
-        }
-    });
+    if (pinForm) {
+        pinForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            if (pinInput.value === TREASURER_PIN) {
+                isTreasurer = true;
+                pinModal.classList.add('hidden');
+                updateRoleUI();
+                showToast("Berhasil masuk Bendahara!");
+            } else if (pinErrorMsg) {
+                pinErrorMsg.classList.remove('hidden');
+            }
+        });
+    }
 
-    // Load Cloud Data
+    // Load Data awal
     loadDataFromCloud();
 
-    document.getElementById('saveFeeBtn').addEventListener('click', () => {
-        const val = parseInt(document.getElementById('standardFeeInput').value, 10);
-        if (!isNaN(val) && val > 0) {
-            standardFee = val;
-            showToast(`Iuran diset ke ${formatRupiah(standardFee)}`);
-        }
-    });
+    const saveFeeBtn = document.getElementById('saveFeeBtn');
+    if (saveFeeBtn) {
+        saveFeeBtn.addEventListener('click', () => {
+            const val = parseInt(document.getElementById('standardFeeInput').value, 10);
+            if (!isNaN(val) && val > 0) {
+                standardFee = val;
+                showToast(`Iuran diset ke ${formatRupiah(standardFee)}`);
+            }
+        });
+    }
 
-    document.getElementById('studentSearchInput').addEventListener('input', (e) => {
-        searchQuery = e.target.value;
-        renderStudentCards();
-    });
+    const searchInput = document.getElementById('studentSearchInput');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            searchQuery = e.target.value;
+            renderStudentCards();
+        });
+    }
 
     const btnAll = document.getElementById('filterAllBtn');
     const btnUnpaid = document.getElementById('filterUnpaidBtn');
     const btnPaid = document.getElementById('filterPaidBtn');
 
-    btnAll.addEventListener('click', () => { activeFilter = 'ALL'; renderStudentCards(); });
-    btnUnpaid.addEventListener('click', () => { activeFilter = 'UNPAID'; renderStudentCards(); });
-    btnPaid.addEventListener('click', () => { activeFilter = 'PAID'; renderStudentCards(); });
+    if (btnAll) btnAll.addEventListener('click', () => { activeFilter = 'ALL'; renderStudentCards(); });
+    if (btnUnpaid) btnUnpaid.addEventListener('click', () => { activeFilter = 'UNPAID'; renderStudentCards(); });
+    if (btnPaid) btnPaid.addEventListener('click', () => { activeFilter = 'PAID'; renderStudentCards(); });
 
     const txModal = document.getElementById('transactionModal');
-    document.getElementById('openTransactionModalBtn').addEventListener('click', () => {
-        populateStudentSelect();
-        document.getElementById('txDateInput').value = getTodayString();
-        txModal.classList.remove('hidden');
-    });
-
-    const closeTxModal = () => txModal.classList.add('hidden');
-    document.getElementById('closeTxModalBtn').addEventListener('click', closeTxModal);
-    document.getElementById('cancelTxModalBtn').addEventListener('click', closeTxModal);
-
-    document.getElementById('transactionForm').addEventListener('submit', (e) => {
-        e.preventDefault();
-        const type = document.querySelector('input[name="txType"]:checked').value;
-        const studentId = document.getElementById('txStudentSelect').value;
-        const amount = Number(document.getElementById('txAmountInput').value);
-        const desc = document.getElementById('txDescInput').value;
-        const date = document.getElementById('txDateInput').value;
-        const student = students.find(s => s.id === studentId);
-
-        transactions.unshift({
-            id: 'tx_' + Date.now(),
-            studentId: studentId || null,
-            studentName: student ? student.name : '',
-            type, amount, desc, date,
-            createdAt: new Date().toISOString()
+    const openTxBtn = document.getElementById('openTransactionModalBtn');
+    if (openTxBtn) {
+        openTxBtn.addEventListener('click', () => {
+            populateStudentSelect();
+            document.getElementById('txDateInput').value = getTodayString();
+            txModal.classList.remove('hidden');
         });
+    }
 
-        syncToCloud();
-        renderAll();
-        closeTxModal();
-        e.target.reset();
-        showToast("Transaksi disimpan!");
-    });
+    const closeTxModal = () => txModal && txModal.classList.add('hidden');
+    const closeTxBtn = document.getElementById('closeTxModalBtn');
+    const cancelTxBtn = document.getElementById('cancelTxModalBtn');
+    if (closeTxBtn) closeTxBtn.addEventListener('click', closeTxModal);
+    if (cancelTxBtn) cancelTxBtn.addEventListener('click', closeTxModal);
 
-    document.getElementById('txTypeFilter').addEventListener('change', renderTransactionHistory);
+    const txForm = document.getElementById('transactionForm');
+    if (txForm) {
+        txForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const type = document.querySelector('input[name="txType"]:checked').value;
+            const studentId = document.getElementById('txStudentSelect').value;
+            const amount = Number(document.getElementById('txAmountInput').value);
+            const desc = document.getElementById('txDescInput').value;
+            const date = document.getElementById('txDateInput').value;
+            const student = students.find(s => s.id === studentId);
+
+            transactions.unshift({
+                id: 'tx_' + Date.now(),
+                studentId: studentId || null,
+                studentName: student ? student.name : '',
+                type, amount, desc, date,
+                createdAt: new Date().toISOString()
+            });
+
+            syncToCloud();
+            renderAll();
+            closeTxModal();
+            e.target.reset();
+            showToast("Transaksi disimpan!");
+        });
+    }
+
+    const txFilter = document.getElementById('txTypeFilter');
+    if (txFilter) txFilter.addEventListener('change', renderTransactionHistory);
+
     updateRoleUI();
 });
